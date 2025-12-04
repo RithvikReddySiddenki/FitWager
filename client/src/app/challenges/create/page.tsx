@@ -1,187 +1,287 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useFitWagerStore } from "@/utils/store";
+import { TransactionModal } from "@/components/TransactionModal";
+import ConnectWalletButton from "@/components/ConnectWalletButton";
 
 const CHALLENGE_TYPES = [
-  { value: "steps", label: "Steps" },
-  { value: "distance", label: "Distance" },
-  { value: "time", label: "Workout Time" },
+  { value: "steps", label: "Steps", icon: "👟" },
+  { value: "distance", label: "Distance", icon: "🏃" },
+  { value: "time", label: "Time", icon: "⏱️" },
+  { value: "calories", label: "Calories", icon: "🔥" },
 ];
 
 const DURATIONS = [
-  { value: 7, label: "7 Days" },
-  { value: 14, label: "14 Days" },
-  { value: 30, label: "30 Days" },
+  { value: 7, label: "1 Week" },
+  { value: 14, label: "2 Weeks" },
+  { value: 30, label: "1 Month" },
+];
+
+const STAKES = [
+  { value: 0.1, label: "◎0.1" },
+  { value: 0.25, label: "◎0.25" },
+  { value: 0.5, label: "◎0.5" },
+  { value: 1, label: "◎1" },
 ];
 
 export default function CreateChallengePage() {
+  const { connected } = useWallet();
+  const wallet = useWallet();
+  const router = useRouter();
+  
+  const { createChallenge, txInProgress, txModal, closeTxModal, addToast } = useFitWagerStore();
+
+  const [mounted, setMounted] = useState(false);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("steps");
   const [goal, setGoal] = useState("");
-  const [stake, setStake] = useState("");
+  const [stake, setStake] = useState(0.25);
   const [duration, setDuration] = useState(7);
+  const [isPublic, setIsPublic] = useState(true);
 
-  function handleSubmit(e: FormEvent) {
+  useEffect(() => { setMounted(true); }, []);
+
+  const getGoalUnit = () => {
+    switch (type) {
+      case "steps": return "steps/day";
+      case "distance": return "miles";
+      case "time": return "min/day";
+      case "calories": return "cal/day";
+      default: return "";
+    }
+  };
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    // TODO: plug in your Anchor / API call here
-    console.log("Create challenge", { title, type, goal, stake, duration });
+    if (!connected) {
+      addToast("Connect wallet first", "warning");
+      return;
+    }
+
+    if (!title.trim() || !goal || parseInt(goal) <= 0) {
+      addToast("Fill in all fields", "warning");
+      return;
+    }
+
+    const result = await createChallenge(wallet, {
+      title: title.trim(),
+      type,
+      goal: Number(goal),
+      stake,
+      duration,
+      isPublic,
+    });
+
+    if (result.success && result.challengeId) {
+      setTimeout(() => {
+        router.push(`/challenges/${result.challengeId}`);
+      }, 2000);
+    }
+  }
+
+  if (!mounted) return null;
+
+  if (!connected) {
+    return (
+      <main className="page-container bg-[#0f0f13]">
+        <div className="flex flex-col items-center justify-center min-h-[70vh] px-6 text-center">
+          <div className="w-20 h-20 rounded-full bg-violet-500/20 flex items-center justify-center mb-6">
+            <span className="text-4xl">🏆</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">Create Challenge</h1>
+          <p className="text-gray-400 mb-8 max-w-sm">
+            Connect your wallet to create a fitness challenge.
+          </p>
+          <ConnectWalletButton />
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-black text-slate-100">
-      <div className="max-w-3xl mx-auto px-4 py-12">
+    <main className="page-container bg-[#0f0f13]">
+      <div className="px-4 max-w-lg mx-auto">
         {/* Header */}
-        <header className="text-center space-y-3 mb-8">
-          <p className="text-xs font-medium tracking-[0.35em] text-purple-300/80 uppercase">
-            New challenge
-          </p>
-          <h1 className="text-3xl sm:text-4xl font-semibold">
-            Set goals, stake SOL, and compete with friends.
-          </h1>
-          <p className="text-sm text-slate-400">
-            Define your challenge parameters below. You can invite friends after
-            you create it.
-          </p>
-        </header>
-
-        {/* Card */}
-        <div className="rounded-3xl bg-slate-900/70 border border-purple-500/30 shadow-[0_0_35px_rgba(168,85,247,0.35)] p-6 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Title */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="title"
-                className="block text-sm font-medium text-slate-200"
-              >
-                Challenge Title
-              </label>
-              <input
-                id="title"
-                type="text"
-                placeholder="Example: 10k Steps a Day"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-2xl bg-slate-950/70 border border-slate-700/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 placeholder:text-slate-500"
-              />
-            </div>
-
-            {/* Type & Duration row */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Type */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="type"
-                  className="block text-sm font-medium text-slate-200"
-                >
-                  Challenge Type
-                </label>
-                <select
-                  id="type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  className="w-full rounded-2xl bg-slate-950/70 border border-slate-700/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  {CHALLENGE_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Duration */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="duration"
-                  className="block text-sm font-medium text-slate-200"
-                >
-                  Duration (days)
-                </label>
-                <select
-                  id="duration"
-                  value={duration}
-                  onChange={(e) => setDuration(Number(e.target.value))}
-                  className="w-full rounded-2xl bg-slate-950/70 border border-slate-700/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  {DURATIONS.map((d) => (
-                    <option key={d.value} value={d.value}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Goal & Stake row */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Goal */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="goal"
-                  className="block text-sm font-medium text-slate-200"
-                >
-                  Goal
-                </label>
-                <input
-                  id="goal"
-                  type="number"
-                  min={0}
-                  placeholder="Ex: 10000"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  className="w-full rounded-2xl bg-slate-950/70 border border-slate-700/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 placeholder:text-slate-500"
-                />
-                <p className="text-xs text-slate-500">
-                  For steps, this is the number of steps per day, etc.
-                </p>
-              </div>
-
-              {/* Stake */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="stake"
-                  className="block text-sm font-medium text-slate-200"
-                >
-                  Stake (SOL)
-                </label>
-                <input
-                  id="stake"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="Ex: 0.25"
-                  value={stake}
-                  onChange={(e) => setStake(e.target.value)}
-                  className="w-full rounded-2xl bg-slate-950/70 border border-slate-700/70 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 placeholder:text-slate-500"
-                />
-                <p className="text-xs text-slate-500">
-                  This amount will be locked in escrow for the duration of the
-                  challenge.
-                </p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
-              <Link
-                href="/dashboard"
-                className="text-xs text-slate-400 hover:text-slate-200 underline underline-offset-4"
-              >
-                ← Back to dashboard
-              </Link>
-
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-purple-500/90 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_0_25px_rgba(168,85,247,0.7)] hover:bg-purple-400 transition disabled:opacity-60"
-                disabled={!title || !goal || !stake}
-              >
-                Create Challenge
-              </button>
-            </div>
-          </form>
+        <div className="pt-2 pb-6">
+          <h1 className="text-2xl font-bold text-white mb-1">Create Challenge</h1>
+          <p className="text-gray-400 text-sm">Set your goals and stake SOL</p>
         </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Challenge Name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g., 10K Steps Daily"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={50}
+              className="input"
+            />
+          </div>
+
+          {/* Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Type
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {CHALLENGE_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setType(t.value)}
+                  className={`p-3 rounded-xl text-center transition ${
+                    type === t.value
+                      ? "bg-violet-500/20 border-2 border-violet-500"
+                      : "bg-white/5 border-2 border-transparent"
+                  }`}
+                >
+                  <span className="text-2xl block mb-1">{t.icon}</span>
+                  <span className="text-xs text-gray-400">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Goal */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Daily Goal
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                placeholder="Enter amount"
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                min={1}
+                className="input pr-20"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
+                {getGoalUnit()}
+              </span>
+            </div>
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Duration
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {DURATIONS.map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setDuration(d.value)}
+                  className={`p-3 rounded-xl text-center transition ${
+                    duration === d.value
+                      ? "bg-cyan-500/20 border-2 border-cyan-500"
+                      : "bg-white/5 border-2 border-transparent"
+                  }`}
+                >
+                  <span className="font-semibold text-white">{d.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Stake */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Entry Fee (SOL)
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {STAKES.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setStake(s.value)}
+                  className={`p-3 rounded-xl text-center transition ${
+                    stake === s.value
+                      ? "bg-emerald-500/20 border-2 border-emerald-500"
+                      : "bg-white/5 border-2 border-transparent"
+                  }`}
+                >
+                  <span className="font-semibold text-emerald-400">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Public Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+            <div>
+              <p className="font-medium text-white">Public Challenge</p>
+              <p className="text-xs text-gray-500">Anyone can join</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPublic(!isPublic)}
+              className={`relative w-12 h-7 rounded-full transition-colors ${
+                isPublic ? "bg-violet-500" : "bg-gray-700"
+              }`}
+            >
+              <span
+                className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform ${
+                  isPublic ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Summary */}
+          <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">You will stake</span>
+              <span className="text-xl font-bold text-emerald-400">◎{stake} SOL</span>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={!title || !goal || txInProgress}
+            className="btn btn-primary btn-block text-base"
+          >
+            {txInProgress ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Creating...
+              </span>
+            ) : (
+              "Create Challenge"
+            )}
+          </button>
+
+          <Link
+            href="/dashboard"
+            className="block text-center text-sm text-gray-500 hover:text-gray-300"
+          >
+            Cancel
+          </Link>
+        </form>
+
+        <TransactionModal
+          isOpen={txModal.isOpen}
+          type={txModal.type}
+          title={txModal.title}
+          message={txModal.message}
+          txSignature={txModal.txSignature}
+          onClose={closeTxModal}
+        />
       </div>
     </main>
   );
