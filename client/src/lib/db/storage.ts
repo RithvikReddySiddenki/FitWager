@@ -3,8 +3,10 @@
  * 
  * Provides a unified interface for data storage.
  * Uses environment variable to switch between:
- * - Local file storage (development)
- * - Supabase (production)
+ * - Firebase (recommended - cloud database, multi-user)
+ * - Supabase (optional - cloud database)
+ * - SQLite (optional - local database)
+ * - Local file storage (fallback)
  */
 
 import { 
@@ -110,20 +112,50 @@ function getSupabaseClient(): SupabaseClient | null {
   return null;
 }
 
-function isUsingSupabase(): boolean {
-  const hasUrl = !!process.env.SUPABASE_URL;
-  const hasKey = !!process.env.SUPABASE_SERVICE_KEY;
-  
-  if (hasUrl && hasKey) {
-    // Validate URL format
-    const url = process.env.SUPABASE_URL;
-    if (url && !url.startsWith('https://')) {
-      console.warn('[Storage] Invalid SUPABASE_URL format, falling back to file storage');
-      return false;
+function isUsingFirebase(): boolean {
+  // Use Firebase if explicitly enabled
+  if (process.env.USE_FIREBASE === 'true') {
+    const hasApiKey = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    const hasProjectId = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    
+    if (hasApiKey && hasProjectId) {
+      return true;
+    } else {
+      console.warn('[Storage] Firebase enabled but missing API key or project ID');
     }
-    return true;
   }
   
+  return false;
+}
+
+function isUsingSupabase(): boolean {
+  // Only use Supabase if explicitly enabled AND Firebase is not enabled
+  if (!isUsingFirebase() && process.env.USE_SUPABASE === 'true') {
+    const hasUrl = !!process.env.SUPABASE_URL;
+    const hasKey = !!process.env.SUPABASE_SERVICE_KEY;
+    
+    if (hasUrl && hasKey) {
+      // Validate URL format
+      const url = process.env.SUPABASE_URL;
+      if (url && !url.startsWith('https://')) {
+        console.warn('[Storage] Invalid SUPABASE_URL format, falling back to file storage');
+        return false;
+      }
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+function isUsingSQLite(): boolean {
+  // Only use SQLite if explicitly enabled via environment variable
+  // This avoids Turbopack build issues with native modules
+  if (typeof window !== 'undefined') return false;
+  if (process.env.USE_SQLITE === 'true') {
+    return !isUsingFirebase() && !isUsingSupabase();
+  }
+  // Default to file storage (simpler, no build issues)
   return false;
 }
 
@@ -132,6 +164,16 @@ function isUsingSupabase(): boolean {
 // ============================================================
 
 export async function getUser(walletAddress: string): Promise<User | null> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getUser(walletAddress);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return null;
@@ -146,12 +188,41 @@ export async function getUser(walletAddress: string): Promise<User | null> {
     return data as User;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getUser(walletAddress);
+      }
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      // If SQLite module not found, fall back to file storage silently
+      if (errorMsg.includes('better-sqlite3') || errorMsg.includes('not available')) {
+        console.warn('[Storage] SQLite not available, using file storage instead');
+      } else {
+        console.error('[Storage] SQLite error, falling back to file storage:', error);
+      }
+      // Fall through to file storage
+    }
+  }
+  
   return memoryStore.users.get(walletAddress) || null;
 }
 
 export async function upsertUser(user: User): Promise<User> {
   const now = Date.now();
   const updatedUser = { ...user, updatedAt: now };
+  
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.upsertUser(updatedUser);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
   
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
@@ -165,6 +236,19 @@ export async function upsertUser(user: User): Promise<User> {
     
     if (error) throw new Error(`Failed to upsert user: ${error.message}`);
     return data as User;
+  }
+  
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.upsertUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
   }
   
   if (!memoryStore.users.has(user.id)) {
@@ -196,6 +280,16 @@ export async function updateUserTokens(
 // ============================================================
 
 export async function getChallenge(challengeId: string): Promise<ChallengeMetadata | null> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getChallenge(challengeId);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return null;
@@ -208,6 +302,19 @@ export async function getChallenge(challengeId: string): Promise<ChallengeMetada
     
     if (error || !data) return null;
     return normalizeCompetitionData(data) as ChallengeMetadata;
+  }
+  
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getChallenge(challengeId);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
   }
   
   return memoryStore.challenges.get(challengeId) || null;
@@ -297,6 +404,32 @@ export async function upsertChallenge(challenge: ChallengeMetadata): Promise<Cha
     }
   }
   
+  // Try Firebase if not using Supabase
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.upsertChallenge(updated);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
+  // Try SQLite if not using Firebase or Supabase
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.upsertChallenge(updated);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
+  // Fallback to file storage
   if (!memoryStore.challenges.has(challenge.id)) {
     updated.createdAt = now;
   }
@@ -383,6 +516,32 @@ export async function listChallenges(filters?: {
     }
   }
   
+  // Try Firebase if not using Supabase
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.listChallenges(filters);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
+  // Try SQLite if not using Firebase or Supabase
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.listChallenges(filters);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
+  // Fallback to file storage
   let challenges = Array.from(memoryStore.challenges.values());
   
   if (filters?.status) {
@@ -408,6 +567,16 @@ export async function getParticipant(
 ): Promise<ParticipantData | null> {
   const id = `${challengeId}_${wallet}`;
   
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getParticipant(challengeId, wallet);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return null;
@@ -422,10 +591,33 @@ export async function getParticipant(
     return data as ParticipantData;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getParticipant(challengeId, wallet);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   return memoryStore.participants.get(id) || null;
 }
 
 export async function upsertParticipant(participant: ParticipantData): Promise<ParticipantData> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.upsertParticipant(participant);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) throw new Error('Supabase client not available');
@@ -440,11 +632,34 @@ export async function upsertParticipant(participant: ParticipantData): Promise<P
     return data as ParticipantData;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.upsertParticipant(participant);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   memoryStore.participants.set(participant.id, participant);
   return participant;
 }
 
 export async function listParticipants(challengeId: string): Promise<ParticipantData[]> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.listParticipants(challengeId);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return [];
@@ -457,6 +672,19 @@ export async function listParticipants(challengeId: string): Promise<Participant
     
     if (error || !data) return [];
     return data as ParticipantData[];
+  }
+  
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.listParticipants(challengeId);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
   }
   
   return Array.from(memoryStore.participants.values())
@@ -474,6 +702,16 @@ export async function getVerification(
 ): Promise<FitnessVerification | null> {
   const id = `${challengeId}_${wallet}`;
   
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getVerification(challengeId, wallet);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return null;
@@ -488,6 +726,19 @@ export async function getVerification(
     return data as FitnessVerification;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getVerification(challengeId, wallet);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   return memoryStore.verifications.get(id) || null;
 }
 
@@ -495,6 +746,16 @@ export async function upsertVerification(
   verification: FitnessVerification
 ): Promise<FitnessVerification> {
   const id = `${verification.challengeId}_${verification.userId}`;
+  
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.upsertVerification(verification);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
   
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
@@ -510,6 +771,19 @@ export async function upsertVerification(
     return data as FitnessVerification;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.upsertVerification(verification);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   memoryStore.verifications.set(id, verification);
   return verification;
 }
@@ -519,6 +793,16 @@ export async function upsertVerification(
 // ============================================================
 
 export async function getUserByGoogleId(googleId: string): Promise<User | null> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getUserByGoogleId(googleId);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
   if (isUsingSupabase()) {
     const client = getSupabaseClient();
     if (!client) return null;
@@ -533,6 +817,19 @@ export async function getUserByGoogleId(googleId: string): Promise<User | null> 
     return data as User;
   }
   
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getUserByGoogleId(googleId);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   for (const user of memoryStore.users.values()) {
     if (user.googleId === googleId) return user;
   }
@@ -544,6 +841,29 @@ export async function getLeaderboard(challengeId: string): Promise<{
   score: number;
   rank: number;
 }[]> {
+  if (isUsingFirebase()) {
+    try {
+      const firebase = await import('./firebase');
+      return await firebase.getLeaderboard(challengeId);
+    } catch (error) {
+      console.error('[Storage] Firebase error, falling back:', error);
+      // Fall through to next option
+    }
+  }
+  
+  if (isUsingSQLite()) {
+    try {
+      // Dynamic import to ensure SQLite is only loaded server-side
+      if (typeof window === 'undefined') {
+        const sqlite = await import('./sqlite');
+        return sqlite.getLeaderboard(challengeId);
+      }
+    } catch (error) {
+      console.error('[Storage] SQLite error, falling back to file storage:', error);
+      // Fall through to file storage
+    }
+  }
+  
   const participants = await listParticipants(challengeId);
   
   return participants

@@ -8,7 +8,7 @@ import {
 } from "@solana/web3.js";
 import { WalletContextState } from "@solana/wallet-adapter-react";
 import { IDL, FitWager } from "./idl";
-import { getChallengePda, getVaultPda, getParticipantPda } from "./pda";
+import { getChallengePda, getVaultPda, getParticipantPda, getProgramId } from "./pda";
 import { solToLamports } from "./solana";
 import { RPC_ENDPOINT } from "./constants";
 
@@ -136,7 +136,16 @@ export function getProgram(provider: AnchorProvider): Program<any> {
   // IDL doesn't strictly match the Anchor TypeScript 'Idl' shape in this workspace
   // (metadata.spec not present). Use a permissive Program<any> to avoid type errors
   // while retaining runtime behavior.
-  return new Program(IDL as any, provider);
+  
+  // Validate program ID before creating program instance
+  try {
+    const programId = getProgramId();
+    console.log('[Anchor] Using program ID:', programId.toBase58());
+    return new Program(IDL as any, programId, provider);
+  } catch (error) {
+    console.error('[Anchor] Invalid program ID:', error);
+    throw new Error(`Invalid program ID: ${error instanceof Error ? error.message : String(error)}. Check NEXT_PUBLIC_PROGRAM_ID in .env.local`);
+  }
 }
 
 // ============================================================

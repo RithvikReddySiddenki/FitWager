@@ -30,5 +30,53 @@
     "status": "active",
     "createdAt": 1764941461916,
     "updatedAt": 1764941461916
+  },
+  {
+    "id": "free_27d0a438-530e-4219-be21-a57edb853131",
+    "title": "15",
+    "description": "A steps challenge with a daily goal of 15 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 15,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764947735,
+    "endTime": 1765552535,
+    "status": "active",
+    "createdAt": 1764947735294,
+    "updatedAt": 1764947735294
+  },
+  {
+    "id": "free_4823586e-3b1e-4cd9-8203-30f0cde2ee47",
+    "title": "15",
+    "description": "A steps challenge with a daily goal of 15 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 15,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764947907,
+    "endTime": 1765552707,
+    "status": "active",
+    "createdAt": 1764947907760,
+    "updatedAt": 1764947907760
+  },
+  {
+    "id": "free_c80f2caf-34c1-4773-88bb-bc6798bf8474",
+    "title": "15",
+    "description": "A steps challenge with a daily goal of 11000 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 11000,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764949027,
+    "endTime": 1765553827,
+    "status": "active",
+    "createdAt": 1764949027168,
+    "updatedAt": 1764949027168
   }
 ]

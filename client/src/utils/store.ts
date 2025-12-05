@@ -387,10 +387,19 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
           entryFee: data.stake,
         });
 
+        // Map challenge type for anchorClient (it expects "time" not "duration")
+        const anchorChallengeTypeMap: Record<string, string> = {
+          "duration": "time",  // Map "duration" from form to "time" for anchorClient
+          "steps": "steps",
+          "distance": "distance",
+          "calories": "calories",
+        };
+        const anchorChallengeType = anchorChallengeTypeMap[data.type] || data.type;
+
         const result = await anchorClient.createChallenge(wallet, {
           entryFeeSol: data.stake,
           durationDays: data.duration,
-          challengeType: data.type,
+          challengeType: anchorChallengeType,
           goal: data.goal,
           isPublic: data.isPublic,
         });

@@ -1,0 +1,32 @@
+[toolchain]
+anchor_version = "0.30.0"
+rust_version = "1.75.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+fitwager = "Fg6PaFpoGXkYsidMpWxqSW1JmAxo9ZPVknpYAH97PvX1"
+
+[programs.mainnet]
+# fitwager = "YOUR_MAINNET_PROGRAM_ID"
+
+[registry]
+url = "https://api.apr.anchor.xyz"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[test]
+startup_wait = 10000
+
+[test.validator.clone]
+account = [
+  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+  "TokenkegQfeZyiNwAJsyFbPVwwQQfFgMoon2tam2gH5Z",
+]
