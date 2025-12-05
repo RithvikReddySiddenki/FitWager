@@ -148,7 +148,16 @@ export function getProgram(provider: AnchorProvider): Program<any> {
     }
     
     console.log('[Anchor] Using program ID:', programId.toBase58());
-    return new Program(IDL as any, programId, provider);
+    
+    // In newer Anchor versions, Program constructor takes (IDL, provider)
+    // and programId is inferred from IDL.address. We need to create a modified IDL
+    // with the correct programId from environment variable.
+    const modifiedIDL = {
+      ...IDL,
+      address: programId.toBase58(),
+    };
+    
+    return new Program(modifiedIDL as any, provider);
   } catch (error) {
     console.error('[Anchor] Invalid program ID:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
