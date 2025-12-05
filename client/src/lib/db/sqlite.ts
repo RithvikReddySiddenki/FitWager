@@ -350,7 +350,7 @@ export function listChallenges(filters?: {
     
     const rows = database.prepare(query).all(...params) as any[];
     
-    let challenges = rows.map(row => ({
+    let challenges: ChallengeMetadata[] = rows.map(row => ({
       id: row.id,
       title: row.name,
       description: row.description || undefined,
@@ -365,7 +365,7 @@ export function listChallenges(filters?: {
       status: row.status,
       createdAt: new Date(row.created_at).getTime(),
       updatedAt: new Date(row.updated_at).getTime(),
-    }));
+    } as ChallengeMetadata));
     
     // Filter by participant if needed
     if (filters?.participant) {
