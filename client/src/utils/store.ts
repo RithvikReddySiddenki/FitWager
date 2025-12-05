@@ -160,6 +160,7 @@ interface FitWagerStore {
     wallet: WalletContextState,
     data: {
       title: string;
+      description?: string;
       type: string;
       goal: number;
       stake: number;
@@ -347,6 +348,31 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
       });
 
       setLastTxSignature(result.signature);
+
+      // Save challenge to database so it appears in explore page
+      try {
+        const dbResponse = await fetch("/api/challenges/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: data.title,
+            description: data.description,
+            creator: wallet.publicKey!.toBase58(),
+            challengeType: data.type,
+            goal: data.goal,
+            entryFee: data.stake,
+            durationDays: data.duration,
+            isPublic: data.isPublic,
+            onChainId: result.challengePda.toBase58(),
+          }),
+        });
+
+        if (!dbResponse.ok) {
+          console.error("Failed to save challenge to database:", dbResponse.statusText);
+        }
+      } catch (dbError) {
+        console.error("Error saving challenge to database:", dbError);
+      }
 
       set({
         txModal: {

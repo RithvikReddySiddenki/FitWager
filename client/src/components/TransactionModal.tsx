@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getExplorerUrl } from "@/utils/constants";
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -102,7 +103,7 @@ export function TransactionModal({
           {/* Transaction Link */}
           {txSignature && (
             <a
-              href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+              href={getExplorerUrl("tx", txSignature)}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-violet-400 mb-4"

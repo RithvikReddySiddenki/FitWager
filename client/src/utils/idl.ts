@@ -77,13 +77,25 @@ export const IDL: FitWager = {
       ],
     },
     {
-      name: "joinChallenge",
+      name: "joinChallengeSol",
       accounts: [
         { name: "player", isMut: true, isSigner: true },
         { name: "challenge", isMut: true, isSigner: false },
         { name: "participant", isMut: true, isSigner: false },
         { name: "escrowVault", isMut: true, isSigner: false },
         { name: "systemProgram", isMut: false, isSigner: false },
+      ],
+      args: [],
+    },
+    {
+      name: "joinChallengeUsdc",
+      accounts: [
+        { name: "player", isMut: true, isSigner: true },
+        { name: "challenge", isMut: true, isSigner: false },
+        { name: "participant", isMut: true, isSigner: false },
+        { name: "playerTokenAccount", isMut: true, isSigner: false },
+        { name: "escrowTokenAccount", isMut: true, isSigner: false },
+        { name: "tokenProgram", isMut: false, isSigner: false },
       ],
       args: [],
     },
@@ -96,16 +108,39 @@ export const IDL: FitWager = {
       args: [{ name: "score", type: "u64" }],
     },
     {
-      name: "endChallenge",
+      name: "endChallengeSol",
       accounts: [
         { name: "creator", isMut: false, isSigner: true },
         { name: "challenge", isMut: true, isSigner: false },
         { name: "escrowVault", isMut: true, isSigner: false },
         { name: "winner", isMut: true, isSigner: false },
+        { name: "platformWallet", isMut: true, isSigner: false },
         { name: "systemProgram", isMut: false, isSigner: false },
         { name: "clock", isMut: false, isSigner: false },
       ],
       args: [{ name: "vaultBump", type: "u8" }],
+    },
+    {
+      name: "endChallengeUsdc",
+      accounts: [
+        { name: "creator", isMut: false, isSigner: true },
+        { name: "challenge", isMut: true, isSigner: false },
+        { name: "escrowTokenAccount", isMut: true, isSigner: false },
+        { name: "winner", isMut: false, isSigner: false },
+        { name: "winnerTokenAccount", isMut: true, isSigner: false },
+        { name: "platformTokenAccount", isMut: true, isSigner: false },
+        { name: "tokenProgram", isMut: false, isSigner: false },
+        { name: "clock", isMut: false, isSigner: false },
+      ],
+      args: [{ name: "escrowBump", type: "u8" }],
+    },
+    {
+      name: "cancelChallenge",
+      accounts: [
+        { name: "creator", isMut: false, isSigner: true },
+        { name: "challenge", isMut: true, isSigner: false },
+      ],
+      args: [],
     },
   ],
   accounts: [

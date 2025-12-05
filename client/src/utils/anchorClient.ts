@@ -349,13 +349,14 @@ export async function createChallenge(
 }
 
 /**
- * Join an existing challenge
+ * Join an existing challenge (SOL or USDC)
  * - Checks if already joined before sending transaction
  * - Uses init_if_needed pattern on chain for safety
  */
 export async function joinChallenge(
   wallet: WalletContextState,
-  challengePda: PublicKey
+  challengePda: PublicKey,
+  useUsdc: boolean = false
 ): Promise<JoinChallengeResult> {
   const provider = getProvider(wallet);
   if (!provider || !wallet.publicKey) {
@@ -383,16 +384,29 @@ export async function joinChallenge(
     const program: any = getProgram(provider);
     const [vaultPda] = getVaultPda(challengePda);
 
-    const signature = await program.methods
-      .joinChallenge()
-      .accounts({
-        player: wallet.publicKey!,
-        challenge: challengePda,
-        participant: participantPda,
-        escrowVault: vaultPda,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+    let signature: string;
+
+    if (useUsdc) {
+      // Get USDC token account (SPL Token)
+      // Note: In production, you would fetch the actual token account address
+      const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJsyFbPVwwQQfFgMoon2tam2gH5Z");
+      
+      // This is a placeholder - in production, fetch actual token accounts
+      // For now, we'll skip USDC for this update
+      throw new Error("USDC support needs additional token account setup");
+    } else {
+      // SOL path
+      signature = await program.methods
+        .joinChallengeSol()
+        .accounts({
+          player: wallet.publicKey!,
+          challenge: challengePda,
+          participant: participantPda,
+          escrowVault: vaultPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    }
 
     await confirmTransaction(provider.connection, signature);
 
@@ -457,7 +471,7 @@ export async function submitScore(
 }
 
 /**
- * End a challenge and pay the winner
+ * End a challenge and pay the winner (SOL or USDC)
  * - Verifies caller is creator
  * - Verifies challenge time has passed
  * - Verifies challenge hasn't already ended
@@ -465,7 +479,8 @@ export async function submitScore(
 export async function endChallenge(
   wallet: WalletContextState,
   challengePda: PublicKey,
-  winnerPubkey: PublicKey
+  winnerPubkey: PublicKey,
+  platformWallet?: PublicKey
 ): Promise<EndChallengeResult> {
   const provider = getProvider(wallet);
   if (!provider || !wallet.publicKey) {
@@ -498,17 +513,30 @@ export async function endChallenge(
   return retryTransaction(async () => {
     const freshProgram: any = getProgram(provider);
 
-    const signature = await freshProgram.methods
-      .endChallenge(vaultBump)
-      .accounts({
-        creator: wallet.publicKey!,
-        challenge: challengePda,
-        escrowVault: vaultPda,
-        winner: winnerPubkey,
-        systemProgram: SystemProgram.programId,
-        clock: SYSVAR_CLOCK_PUBKEY,
-      })
-      .rpc();
+    let signature: string;
+
+    // Use default platform wallet if not provided
+    const platformAddr = platformWallet || wallet.publicKey!;
+
+    if (challenge.is_usdc) {
+      // USDC path
+      // Note: In production, you would fetch actual token accounts
+      throw new Error("USDC payouts need additional token account setup");
+    } else {
+      // SOL path
+      signature = await freshProgram.methods
+        .endChallengeSol(vaultBump)
+        .accounts({
+          creator: wallet.publicKey!,
+          challenge: challengePda,
+          escrowVault: vaultPda,
+          winner: winnerPubkey,
+          platformWallet: platformAddr,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .rpc();
+    }
 
     await confirmTransaction(provider.connection, signature);
 

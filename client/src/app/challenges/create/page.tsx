@@ -78,6 +78,7 @@ export default function CreateChallengePage() {
 
     const result = await createChallenge(wallet, {
       title: title.trim(),
+      description: `A ${type} challenge with a daily goal of ${goal} ${getGoalUnit().split('/')[0]}.`,
       type,
       goal: Number(goal),
       stake,

@@ -2,8 +2,8 @@
  * Database Schema Types for FitWager
  * 
  * This defines the data models for storing:
- * - User OAuth tokens (Google)
- * - Challenge metadata
+ * - User OAuth tokens (Google) - maps to 'users' table
+ * - Challenge metadata - maps to 'competitions' table in Supabase
  * - Participant data
  * - Fitness verification results
  */
@@ -20,19 +20,19 @@ export interface User {
 }
 
 export interface ChallengeMetadata {
-  id: string;                    // Challenge PDA (on-chain)
-  title: string;                 // Human-readable title
+  id: string;                    // Challenge PDA (on-chain) - stored as 'id' in competitions table
+  title: string;                 // Human-readable title - stored as 'name' in competitions table
   description?: string;          // Description
   creator: string;               // Creator wallet
   challengeType: ChallengeType;  // steps | distance | duration | calories
   goal: number;                  // Target value
-  entryFee: number;              // Entry fee in lamports or USDC micro-units
+  entryFee: number;              // Entry fee in lamports or USDC micro-units - stored as 'sol_amount'
   isUsdc: boolean;               // Payment type
   isPublic: boolean;             // Public visibility
   startTime: number;             // Unix timestamp
-  endTime: number;               // Unix timestamp
+  endTime: number;               // Unix timestamp - duration_days stored as field
   status: ChallengeStatus;       // active | ended | cancelled
-  createdAt: number;
+  createdAt: number;             // created_at in Supabase
   updatedAt: number;
 }
 

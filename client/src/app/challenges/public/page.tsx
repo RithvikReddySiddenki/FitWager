@@ -223,6 +223,11 @@ export default function PublicChallengesPage() {
                     )}
                   </div>
 
+                  {/* Description */}
+                  {challenge.description && (
+                    <p className="text-sm text-gray-400 mb-3 line-clamp-2">{challenge.description}</p>
+                  )}
+
                   {/* Stats */}
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-white/5 rounded-lg p-2 text-center">
