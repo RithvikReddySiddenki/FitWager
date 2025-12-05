@@ -34,6 +34,9 @@ export interface ParticipantAccount {
 export interface CreateChallengeParams {
   entryFeeSol: number;
   durationDays: number;
+  challengeType: string; // "steps", "distance", "time", "calories"
+  goal: number;
+  isPublic: boolean;
 }
 
 export interface CreateChallengeResult {
@@ -79,18 +82,46 @@ export function getConnection(): Connection {
  */
 export function getProvider(wallet: WalletContextState): AnchorProvider | null {
   if (!wallet.publicKey || !wallet.signTransaction || !wallet.signAllTransactions) {
+    console.warn("Wallet missing required properties:", {
+      hasPublicKey: !!wallet.publicKey,
+      hasSignTransaction: !!wallet.signTransaction,
+      hasSignAllTransactions: !!wallet.signAllTransactions,
+    });
     return null;
   }
 
   const connection = getConnection();
   
+  // Create a wallet that properly implements the Wallet interface
+  const walletAdapter = {
+    publicKey: wallet.publicKey,
+    signTransaction: async (tx: any) => {
+      console.log("Wallet adapter: signing transaction...");
+      try {
+        const signed = await wallet.signTransaction!(tx);
+        console.log("Wallet adapter: transaction signed successfully");
+        return signed;
+      } catch (error) {
+        console.error("Wallet adapter: signing failed", error);
+        throw error;
+      }
+    },
+    signAllTransactions: async (txs: any[]) => {
+      console.log("Wallet adapter: signing all transactions...");
+      try {
+        const signed = await wallet.signAllTransactions!(txs);
+        console.log("Wallet adapter: all transactions signed successfully");
+        return signed;
+      } catch (error) {
+        console.error("Wallet adapter: signing failed", error);
+        throw error;
+      }
+    },
+  };
+  
   return new AnchorProvider(
     connection,
-    {
-      publicKey: wallet.publicKey,
-      signTransaction: wallet.signTransaction,
-      signAllTransactions: wallet.signAllTransactions,
-    },
+    walletAdapter,
     { 
       commitment: "confirmed",
       preflightCommitment: "confirmed",
@@ -101,7 +132,10 @@ export function getProvider(wallet: WalletContextState): AnchorProvider | null {
 /**
  * Get a fresh program instance for each operation
  */
-export function getProgram(provider: AnchorProvider): Program<FitWager> {
+export function getProgram(provider: AnchorProvider): Program<any> {
+  // IDL doesn't strictly match the Anchor TypeScript 'Idl' shape in this workspace
+  // (metadata.spec not present). Use a permissive Program<any> to avoid type errors
+  // while retaining runtime behavior.
   return new Program(IDL as any, provider);
 }
 
@@ -221,7 +255,7 @@ export async function createChallenge(
   }
 
   return retryTransaction(async () => {
-    const program = getProgram(provider);
+    const program: any = getProgram(provider);
     const timestamp = Math.floor(Date.now() / 1000);
     const [challengePda] = getChallengePda(wallet.publicKey!, timestamp);
     const [vaultPda] = getVaultPda(challengePda);
@@ -229,16 +263,78 @@ export async function createChallenge(
     const entryFeeLamports = new BN(solToLamports(params.entryFeeSol));
     const durationSeconds = new BN(params.durationDays * 24 * 60 * 60);
 
-    const signature = await program.methods
-      .createChallenge(entryFeeLamports, durationSeconds)
-      .accounts({
-        creator: wallet.publicKey!,
-        challenge: challengePda,
-        escrowVault: vaultPda,
-        systemProgram: SystemProgram.programId,
-        clock: SYSVAR_CLOCK_PUBKEY,
-      })
-      .rpc();
+    // Map UI type strings to enum values
+    const challengeTypeMap: Record<string, any> = {
+      steps: { steps: {} },
+      distance: { distance: {} },
+      time: { duration: {} },
+      calories: { calories: {} },
+    };
+
+    const challengeType = challengeTypeMap[params.challengeType] || { steps: {} };
+    const goal = new BN(params.goal);
+
+    console.log("Creating challenge with:", {
+      creator: wallet.publicKey!.toBase58(),
+      challengePda: challengePda.toBase58(),
+      entryFeeLamports: entryFeeLamports.toString(),
+      durationSeconds: durationSeconds.toString(),
+      challengeType: params.challengeType,
+      goal: goal.toString(),
+      isPublic: params.isPublic,
+    });
+
+    let signature;
+    try {
+      console.log("Building Anchor program method...");
+      const methodBuilder = program.methods
+        .createChallenge(
+          entryFeeLamports,
+          durationSeconds,
+          challengeType,
+          goal,
+          false, // isUsdc - always false for SOL challenges
+          params.isPublic
+        )
+        .accounts({
+          creator: wallet.publicKey!,
+          challenge: challengePda,
+          escrowVault: vaultPda,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        });
+
+      console.log("Method built. Calling .rpc()...");
+      
+      // Use Promise.race to timeout faster if the wallet doesn't respond
+      signature = await Promise.race([
+        (async () => {
+          console.log("Requesting wallet signature...");
+          const sig = await methodBuilder.rpc();
+          console.log("Wallet signed successfully:", sig);
+          return sig;
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            console.error("RPC call timeout - wallet never responded to signing request");
+            reject(new Error("Wallet signing timeout (30s) - check your wallet app and try again"));
+          }, 30000)
+        ),
+      ]);
+    } catch (error) {
+      console.error("RPC call or wallet signing failed:", error);
+      const errorMsg = String(error);
+      
+      // If it's a timeout, give a user-friendly message
+      if (errorMsg.includes("timeout")) {
+        throw new Error(
+          "Transaction signing timed out. Make sure your wallet app is open and responsive. Try again."
+        );
+      }
+      throw error;
+    }
+
+    console.log("Transaction signature:", signature);
 
     // Wait for confirmation
     await confirmTransaction(provider.connection, signature);
@@ -270,7 +366,7 @@ export async function joinChallenge(
   const [participantPda] = getParticipantPda(challengePda, wallet.publicKey);
   
   try {
-    const program = getProgram(provider);
+    const program: any = getProgram(provider);
     const existingParticipant = await program.account.participant.fetchNullable(participantPda);
     if (existingParticipant?.hasJoined) {
       throw new Error("You have already joined this challenge");
@@ -284,7 +380,7 @@ export async function joinChallenge(
   }
 
   return retryTransaction(async () => {
-    const program = getProgram(provider);
+    const program: any = getProgram(provider);
     const [vaultPda] = getVaultPda(challengePda);
 
     const signature = await program.methods
@@ -323,7 +419,7 @@ export async function submitScore(
   }
 
   // Pre-flight checks
-  const program = getProgram(provider);
+  const program: any = getProgram(provider);
   
   // Check challenge status
   const challenge = await program.account.challenge.fetch(challengePda);
@@ -344,7 +440,7 @@ export async function submitScore(
   }
 
   return retryTransaction(async () => {
-    const freshProgram = getProgram(provider);
+    const freshProgram: any = getProgram(provider);
 
     const signature = await freshProgram.methods
       .submitScore(new BN(score))
@@ -377,7 +473,7 @@ export async function endChallenge(
   }
 
   // Pre-flight checks
-  const program = getProgram(provider);
+  const program: any = getProgram(provider);
   const challenge = await program.account.challenge.fetch(challengePda);
   
   // Verify creator
@@ -400,7 +496,7 @@ export async function endChallenge(
   const [vaultPda, vaultBump] = getVaultPda(challengePda);
 
   return retryTransaction(async () => {
-    const freshProgram = getProgram(provider);
+    const freshProgram: any = getProgram(provider);
 
     const signature = await freshProgram.methods
       .endChallenge(vaultBump)
@@ -442,7 +538,7 @@ export async function fetchChallenge(
       {} as never,
       { commitment: "confirmed" }
     );
-    const program = new Program(IDL as any, provider);
+    const program: any = new Program(IDL as any, provider);
     
     const account = await program.account.challenge.fetch(challengePda);
     return account as unknown as ChallengeAccount;
@@ -466,7 +562,7 @@ export async function fetchParticipant(
       {} as never,
       { commitment: "confirmed" }
     );
-    const program = new Program(IDL as any, provider);
+    const program: any = new Program(IDL as any, provider);
     
     const [participantPda] = getParticipantPda(challengePda, playerPubkey);
     const account = await program.account.participant.fetch(participantPda);
@@ -489,10 +585,10 @@ export async function fetchAllChallenges(): Promise<
       {} as never,
       { commitment: "confirmed" }
     );
-    const program = new Program(IDL as any, provider);
+    const program: any = new Program(IDL as any, provider);
     
     const accounts = await program.account.challenge.all();
-    return accounts.map((a) => ({
+    return accounts.map((a: any) => ({
       pubkey: a.publicKey,
       account: a.account as unknown as ChallengeAccount,
     }));
@@ -515,7 +611,7 @@ export async function fetchChallengeParticipants(
       {} as never,
       { commitment: "confirmed" }
     );
-    const program = new Program(IDL as any, provider);
+    const program: any = new Program(IDL as any, provider);
     
     // Get all participant accounts and filter by challenge
     const allParticipants = await program.account.participant.all();
@@ -605,6 +701,9 @@ export function formatAnchorError(error: unknown): string {
     }
     if (errorMessage.includes("blockhash")) {
       return "Network congestion. Please try again.";
+    }
+    if (errorMessage.includes("Account not found")) {
+      return "Challenge not found on blockchain";
     }
     
     return errorMessage;

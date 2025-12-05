@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import { getParticipantPda, getVaultPda } from "@/utils/pda";
+import { getChallenge } from '@/lib/db/storage';
+import { MIN_STAKE_SOL } from '@/utils/constants';
+import { isEntryFeeValid } from '@/utils/validation';
 
 interface JoinChallengeRequest {
   player: string;
@@ -21,6 +24,12 @@ export async function POST(request: NextRequest) {
 
     const player = new PublicKey(body.player);
     const challengePda = new PublicKey(body.challengePda);
+
+    // Validate challenge entry fee (prevent joining challenges with tiny fees)
+    const challenge = await getChallenge(challengePda.toBase58());
+    if (!challenge || !isEntryFeeValid(challenge.entryFee ?? 0)) {
+      return NextResponse.json({ error: `Challenge entry fee must be at least ◎${MIN_STAKE_SOL} SOL` }, { status: 400 });
+    }
 
     // Get PDAs
     const [participantPda, participantBump] = getParticipantPda(challengePda, player);

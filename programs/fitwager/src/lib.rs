@@ -8,6 +8,9 @@ declare_id!("Fg6PaFpoGXkYsidMpWxqSW1JmAxo9ZPVknpYAH97PvX1");
 pub mod fitwager {
     use super::*;
 
+    // Minimum entry fee enforced on-chain: 0.02 SOL (20,000,000 lamports)
+    const MIN_ENTRY_FEE_LAMPORTS: u64 = 20_000_000;
+
     /// Create a new fitness challenge
     /// Supports both SOL and USDC entry fees
     pub fn create_challenge(
@@ -22,7 +25,7 @@ pub mod fitwager {
         let challenge = &mut ctx.accounts.challenge;
         let clock = Clock::get()?;
 
-        require!(entry_fee > 0, FitError::InvalidEntryFee);
+        require!(entry_fee >= MIN_ENTRY_FEE_LAMPORTS, FitError::EntryFeeTooSmall);
         require!(duration_seconds > 0, FitError::InvalidDuration);
         require!(goal > 0, FitError::InvalidGoal);
 
@@ -64,6 +67,9 @@ pub mod fitwager {
 
         let clock = Clock::get()?;
         require!(clock.unix_timestamp < challenge.end_time, FitError::ChallengeEnded);
+
+        // Enforce minimum entry fee for joins (prevents joining tiny-fee challenges)
+        require!(challenge.entry_fee >= MIN_ENTRY_FEE_LAMPORTS, FitError::EntryFeeTooSmall);
 
         // Transfer SOL to escrow vault
         transfer(
@@ -109,6 +115,9 @@ pub mod fitwager {
 
         let clock = Clock::get()?;
         require!(clock.unix_timestamp < challenge.end_time, FitError::ChallengeEnded);
+
+        // Enforce minimum entry fee for joins (prevents joining tiny-fee challenges)
+        require!(challenge.entry_fee >= MIN_ENTRY_FEE_LAMPORTS, FitError::EntryFeeTooSmall);
 
         // Transfer USDC to escrow token account
         token::transfer(
@@ -627,6 +636,9 @@ pub struct ChallengeCancelled {
 pub enum FitError {
     #[msg("Entry fee must be greater than 0")]
     InvalidEntryFee,
+
+    #[msg("Entry fee must be at least 0.02 SOL")]
+    EntryFeeTooSmall,
 
     #[msg("Duration must be greater than 0")]
     InvalidDuration,

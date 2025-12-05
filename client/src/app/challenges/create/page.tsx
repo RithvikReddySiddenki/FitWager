@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState, useEffect } from "react";
+import { MIN_STAKE_SOL } from "@/utils/constants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -22,6 +23,7 @@ const DURATIONS = [
 ];
 
 const STAKES = [
+  { value: 0.02, label: "◎0.02" },
   { value: 0.1, label: "◎0.1" },
   { value: 0.25, label: "◎0.25" },
   { value: 0.5, label: "◎0.5" },
@@ -68,6 +70,12 @@ export default function CreateChallengePage() {
       return;
     }
 
+    // Validate minimum stake
+    if (stake < MIN_STAKE_SOL) {
+      addToast(`Entry fee must be at least ◎${MIN_STAKE_SOL} SOL`, "warning");
+      return;
+    }
+
     const result = await createChallenge(wallet, {
       title: title.trim(),
       type,
@@ -78,9 +86,8 @@ export default function CreateChallengePage() {
     });
 
     if (result.success && result.challengeId) {
-      setTimeout(() => {
-        router.push(`/challenges/${result.challengeId}`);
-      }, 2000);
+      // Redirect immediately to the new challenge page
+      router.push(`/challenges/${result.challengeId}`);
     }
   }
 
@@ -199,6 +206,7 @@ export default function CreateChallengePage() {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Entry Fee (SOL)
+              <div className="text-xs text-gray-500 mt-1">Minimum: ◎{MIN_STAKE_SOL} SOL</div>
             </label>
             <div className="grid grid-cols-4 gap-2">
               {STAKES.map((s) => (

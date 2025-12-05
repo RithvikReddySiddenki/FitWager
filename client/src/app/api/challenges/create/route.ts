@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { upsertChallenge } from '@/lib/db/storage';
 import { ChallengeMetadata, ChallengeType } from '@/lib/db/schema';
 import { v4 as uuidv4 } from 'uuid';
+import { MIN_STAKE_SOL } from '@/utils/constants';
+import { isEntryFeeValid } from '@/utils/validation';
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +52,14 @@ export async function POST(request: NextRequest) {
     if (goal <= 0 || entryFee <= 0 || durationDays <= 0) {
       return NextResponse.json(
         { success: false, error: 'Goal, entryFee, and durationDays must be positive' },
+        { status: 400 }
+      );
+    }
+
+    // Enforce minimum entry fee in SOL
+    if (!isEntryFeeValid(entryFee)) {
+      return NextResponse.json(
+        { success: false, error: `Entry fee must be at least ◎${MIN_STAKE_SOL} SOL` },
         { status: 400 }
       );
     }

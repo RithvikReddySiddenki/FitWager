@@ -45,7 +45,8 @@ export function getExplorerUrl(type: "tx" | "address", value: string): string {
 
 // Challenge defaults
 export const DEFAULT_CHALLENGE_DURATION_DAYS = 7;
-export const MIN_STAKE_SOL = 0.01;
+// The minimum entry fee (in SOL) enforced across UI / API / on-chain program
+export const MIN_STAKE_SOL = 0.02;
 export const MAX_STAKE_SOL = 100;
 
 // Fee constants (in basis points)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { MIN_STAKE_SOL } from "@/utils/constants";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -116,6 +117,11 @@ export default function ChallengeDetailPage() {
   const handleJoin = useCallback(async () => {
     if (!connected || !currentChallenge) {
       addToast("Connect wallet first", "warning");
+      return;
+    }
+    // Enforce minimum entry fee
+    if ((currentChallenge.entryFee ?? 0) < MIN_STAKE_SOL) {
+      addToast(`Entry fee must be at least ◎${MIN_STAKE_SOL} SOL to join`, "warning");
       return;
     }
     await joinChallenge(wallet, currentChallenge.id);

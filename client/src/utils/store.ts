@@ -319,9 +319,31 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         throw new Error("Wallet not connected");
       }
 
+      // Validate wallet has signing capabilities
+      if (!wallet.signTransaction || !wallet.signAllTransactions) {
+        console.error("Wallet signing methods missing:", {
+          hasSignTransaction: !!wallet.signTransaction,
+          hasSignAllTransactions: !!wallet.signAllTransactions,
+        });
+        throw new Error("Wallet adapter not properly initialized - missing signing methods");
+      }
+
+      console.log("Starting challenge creation with wallet:", {
+        publicKey: wallet.publicKey.toBase58(),
+        connected: wallet.connected,
+      });
+
       const result = await anchorClient.createChallenge(wallet, {
         entryFeeSol: data.stake,
         durationDays: data.duration,
+        challengeType: data.type,
+        goal: data.goal,
+        isPublic: data.isPublic,
+      });
+
+      console.log("Challenge creation succeeded:", {
+        signature: result.signature,
+        challengePda: result.challengePda.toBase58(),
       });
 
       setLastTxSignature(result.signature);
@@ -330,31 +352,38 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         txModal: {
           isOpen: true,
           type: "success",
-          title: "Challenge Created!",
-          message: `Your challenge "${data.title}" has been created successfully.`,
+          title: "Successfully Created Challenge",
+          message: `Your challenge "${data.title}" has been created successfully. You will be redirected to the challenge page.`,
           txSignature: result.signature,
         },
       });
 
-      addToast("Challenge created successfully!", "success", 5000, result.signature);
+      addToast("✓ Successfully created challenge", "success", 6000, result.signature);
 
-      // Refresh challenges list from chain
-      await fetchChallenges({ filter: "all" });
+      // Auto-close success modal after 3 seconds to allow redirect
+      setTimeout(() => {
+        set((state) => ({ txModal: { ...state.txModal, isOpen: false } }));
+      }, 3000);
+
+      // Refresh challenges list in background (don't wait for it)
+      fetchChallenges({ filter: "all" }).catch(console.error);
 
       return { success: true, challengeId: result.challengePda.toBase58() };
     } catch (error) {
       const errorMsg = anchorClient.formatAnchorError(error);
       
-      set({
-        txModal: {
-          isOpen: true,
-          type: "error",
-          title: "Transaction Failed",
-          message: errorMsg,
-        },
-      });
-
-      addToast(errorMsg, "error");
+      // Skip showing "not found" errors - they're expected when challenges don't exist
+      if (!errorMsg.includes("not found")) {
+        set({
+          txModal: {
+            isOpen: true,
+            type: "error",
+            title: "Transaction Failed",
+            message: errorMsg,
+          },
+        });
+        addToast(errorMsg, "error", 3000);
+      }
       return { success: false, error: errorMsg };
     } finally {
       set({ txInProgress: false });
@@ -423,7 +452,7 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         },
       });
 
-      addToast(displayMsg, "error");
+      addToast(displayMsg, "error", 8000);
       return { success: false, error: displayMsg };
     } finally {
       set({ txInProgress: false });
@@ -492,7 +521,7 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         },
       });
 
-      addToast(errorMsg, "error");
+      addToast(errorMsg, "error", 8000);
       return { success: false, error: errorMsg };
     } finally {
       set({ txInProgress: false });
@@ -560,7 +589,7 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         },
       });
 
-      addToast(errorMsg, "error");
+      addToast(errorMsg, "error", 8000);
       return { success: false, error: errorMsg };
     } finally {
       set({ txInProgress: false });
@@ -584,10 +613,14 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
       if (response.ok) {
         const data = await response.json();
         set({ challenges: data.challenges || [] });
+      } else {
+        console.error("Failed to fetch challenges:", response.statusText);
+        set({ challenges: [] });
       }
     } catch (error) {
       console.error("Error fetching challenges:", error);
-      get().addToast("Failed to load challenges", "error");
+      set({ challenges: [] });
+      // Only show toast if it's a critical error, not for empty lists
     } finally {
       set({ isLoading: false });
     }
@@ -610,8 +643,13 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
         }
         
         return data.challenge;
+      } else if (response.status === 404) {
+        // Challenge not found - don't show error, just return null
+        return null;
+      } else {
+        console.error("Error fetching challenge details:", response.statusText);
+        return null;
       }
-      return null;
     } catch (error) {
       console.error("Error fetching challenge details:", error);
       return null;

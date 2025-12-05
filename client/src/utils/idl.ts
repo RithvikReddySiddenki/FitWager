@@ -22,7 +22,7 @@ export interface FitWager {
     }>;
     args: Array<{
       name: string;
-      type: string;
+      type: string | { defined: string };
     }>;
   }>;
   accounts: Array<{
@@ -70,6 +70,10 @@ export const IDL: FitWager = {
       args: [
         { name: "entryFee", type: "u64" },
         { name: "durationSeconds", type: "i64" },
+        { name: "challengeType", type: { defined: "ChallengeType" } },
+        { name: "goal", type: "u64" },
+        { name: "isUsdc", type: "bool" },
+        { name: "isPublic", type: "bool" },
       ],
     },
     {
@@ -137,6 +141,18 @@ export const IDL: FitWager = {
       type: {
         kind: "enum",
         variants: [{ name: "Active" }, { name: "Ended" }],
+      },
+    },
+    {
+      name: "ChallengeType",
+      type: {
+        kind: "enum",
+        variants: [
+          { name: "Steps" },
+          { name: "Distance" },
+          { name: "Duration" },
+          { name: "Calories" },
+        ],
       },
     },
   ],

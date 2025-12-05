@@ -69,7 +69,8 @@ export async function exchangeCodeForTokens(code: string): Promise<{
   
   return {
     accessToken: tokens.access_token!,
-    refreshToken: tokens.refresh_token,
+    // tokens.refresh_token can be null from the Google API; normalize null to undefined
+    refreshToken: tokens.refresh_token ?? undefined,
     expiryDate: tokens.expiry_date || Date.now() + 3600000,
   };
 }
@@ -198,9 +199,10 @@ async function fetchDataPoints(
     for (const point of points) {
       const values = point.value || [];
       for (const value of values) {
-        if (value.intVal !== undefined) {
+        // guard against null and undefined for both intVal and fpVal
+        if (value.intVal != null) {
           total += value.intVal;
-        } else if (value.fpVal !== undefined) {
+        } else if (value.fpVal != null) {
           total += value.fpVal;
         }
       }
@@ -235,7 +237,7 @@ async function fetchActivitySessions(
       startTime: parseInt(session.startTimeMillis || '0'),
       endTime: parseInt(session.endTimeMillis || '0'),
       duration: parseInt(session.endTimeMillis || '0') - parseInt(session.startTimeMillis || '0'),
-      activityType: getActivityTypeName(session.activityType),
+      activityType: getActivityTypeName(session.activityType ?? undefined),
     }));
   } catch (error) {
     console.error('Error fetching sessions:', error);
