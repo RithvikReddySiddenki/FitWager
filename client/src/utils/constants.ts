@@ -7,10 +7,34 @@ const DEFAULT_PROGRAM_ID_STR = "Fg6PaFpoGXkYsidMpWxqSW1JmAxo9ZPVknpYAH97PvX1";
  * Get program ID - lazy loaded to avoid server-side initialization issues
  */
 export function getProgramId(): PublicKey {
-  const programIdStr = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PROGRAM_ID 
-    ? process.env.NEXT_PUBLIC_PROGRAM_ID 
-    : DEFAULT_PROGRAM_ID_STR;
-  return new PublicKey(programIdStr);
+  // Try to get from environment variable, fall back to default
+  let programIdStr: string;
+  
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PROGRAM_ID) {
+    programIdStr = process.env.NEXT_PUBLIC_PROGRAM_ID;
+  } else {
+    // Use default if env var not set
+    programIdStr = DEFAULT_PROGRAM_ID_STR;
+    console.warn('[Constants] NEXT_PUBLIC_PROGRAM_ID not set, using default:', DEFAULT_PROGRAM_ID_STR);
+  }
+  
+  // Validate program ID format
+  if (!programIdStr || typeof programIdStr !== 'string') {
+    throw new Error('Program ID is not set. Please set NEXT_PUBLIC_PROGRAM_ID in .env.local');
+  }
+  
+  // Check for invalid characters (Base58 should only contain alphanumeric except 0, O, I, l)
+  if (programIdStr.length < 32 || programIdStr.length > 44) {
+    throw new Error(`Invalid program ID length: ${programIdStr.length}. Expected 32-44 characters.`);
+  }
+  
+  try {
+    const publicKey = new PublicKey(programIdStr);
+    console.log('[Constants] Program ID loaded:', publicKey.toBase58());
+    return publicKey;
+  } catch (error) {
+    throw new Error(`Invalid program ID format (non-base58 character): ${programIdStr}. Error: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 // Legacy export for compatibility

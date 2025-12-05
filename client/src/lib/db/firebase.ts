@@ -218,7 +218,7 @@ export async function listChallenges(filters?: {
     const q = query(competitionsRef, ...constraints);
     const querySnapshot = await getDocs(q);
     
-    let challenges = querySnapshot.docs.map(doc => {
+    let challenges: ChallengeMetadata[] = querySnapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: data.id,
@@ -235,7 +235,7 @@ export async function listChallenges(filters?: {
         status: data.status || 'active',
         createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
         updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : Date.now(),
-      };
+      } as ChallengeMetadata;
     });
     
     // Sort by created_at descending

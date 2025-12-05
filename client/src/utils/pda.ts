@@ -1,31 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
-
-// Default program ID (replace with your deployed program ID)
-const DEFAULT_PROGRAM_ID_STR = "Fg6PaFpoGXkYsidMpWxqSW1JmAxo9ZPVknpYAH97PvX1";
+import { getProgramId as getProgramIdFromConstants } from "./constants";
 
 /**
- * Get program ID - lazy loaded to avoid server-side initialization issues
+ * Re-export getProgramId from constants to maintain compatibility
  */
 export function getProgramId(): PublicKey {
-  const programIdStr = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_PROGRAM_ID 
-    ? process.env.NEXT_PUBLIC_PROGRAM_ID 
-    : DEFAULT_PROGRAM_ID_STR;
-  
-  // Validate program ID format
-  if (!programIdStr || typeof programIdStr !== 'string') {
-    throw new Error('Program ID is not set. Please set NEXT_PUBLIC_PROGRAM_ID in .env.local');
-  }
-  
-  // Check for invalid characters (Base58 should only contain alphanumeric except 0, O, I, l)
-  if (programIdStr.length < 32 || programIdStr.length > 44) {
-    throw new Error(`Invalid program ID length: ${programIdStr.length}. Expected 32-44 characters.`);
-  }
-  
-  try {
-    return new PublicKey(programIdStr);
-  } catch (error) {
-    throw new Error(`Invalid program ID format (non-base58 character): ${programIdStr}. Error: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  return getProgramIdFromConstants();
 }
 
 /**
