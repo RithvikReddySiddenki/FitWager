@@ -491,9 +491,18 @@ export function getVerification(
     if (!row) return null;
     
     // Note: rawData is stored as JSON string, need to parse it
-    let rawData: GoogleFitData | null = null;
+    let rawData: GoogleFitData = {
+      dataSource: 'unknown',
+      fetchedAt: Date.now(),
+    };
     try {
-      rawData = JSON.parse(row.rawData || '{}');
+      const parsed = JSON.parse(row.rawData || '{}');
+      rawData = {
+        ...rawData,
+        ...parsed,
+        dataSource: parsed.dataSource || 'unknown',
+        fetchedAt: parsed.fetchedAt || Date.now(),
+      };
     } catch {}
     
     return {
@@ -502,7 +511,7 @@ export function getVerification(
       challengeType: row.challengeType,
       startTime: row.startTime,
       endTime: row.endTime,
-      rawData: rawData || {},
+      rawData: rawData,
       calculatedScore: row.calculatedScore,
       meetsGoal: row.meetsGoal === 1,
       verifiedAt: row.verifiedAt,
