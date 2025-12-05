@@ -149,10 +149,10 @@ export function getProgram(provider: AnchorProvider): Program<any> {
     
     console.log('[Anchor] Using program ID:', programId.toBase58());
     
-    // In newer Anchor versions, Program constructor takes (IDL, provider)
+    // In newer Anchor versions (0.30+), Program constructor takes (IDL, provider)
     // and programId is inferred from IDL.address. We need to create a modified IDL
     // with the correct programId from environment variable.
-    const modifiedIDL = {
+    const modifiedIDL: FitWager = {
       ...IDL,
       address: programId.toBase58(),
     };
