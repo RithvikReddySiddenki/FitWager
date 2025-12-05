@@ -25,7 +25,8 @@ import {
   User, 
   ChallengeMetadata, 
   ParticipantData, 
-  FitnessVerification 
+  FitnessVerification,
+  GoogleFitData
 } from './schema';
 
 // Firebase configuration
@@ -364,9 +365,18 @@ export async function getVerification(
     if (!verificationSnap.exists()) return null;
     
     const data = verificationSnap.data();
-    let rawData = {};
+    let rawData: GoogleFitData = {
+      dataSource: 'unknown',
+      fetchedAt: Date.now(),
+    };
     try {
-      rawData = typeof data.rawData === 'string' ? JSON.parse(data.rawData) : (data.rawData || {});
+      const parsed = typeof data.rawData === 'string' ? JSON.parse(data.rawData) : (data.rawData || {});
+      rawData = {
+        ...rawData,
+        ...parsed,
+        dataSource: parsed.dataSource || 'unknown',
+        fetchedAt: parsed.fetchedAt || Date.now(),
+      };
     } catch {}
     
     return {
