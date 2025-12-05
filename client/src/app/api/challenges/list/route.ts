@@ -40,6 +40,14 @@ export async function GET(request: NextRequest) {
       creator,
     });
     
+    console.log('[API] List challenges:', {
+      filter: status,
+      isPublicOnly,
+      creator,
+      count: challenges.length,
+      challengeIds: challenges.map(c => c.id),
+    });
+    
     // If filtering by participant, we need to check participation data
     if (participant) {
       const participantChallenges: ChallengeMetadata[] = [];

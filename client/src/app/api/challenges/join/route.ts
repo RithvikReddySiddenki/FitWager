@@ -25,10 +25,15 @@ export async function POST(request: NextRequest) {
     const player = new PublicKey(body.player);
     const challengePda = new PublicKey(body.challengePda);
 
-    // Validate challenge entry fee (prevent joining challenges with tiny fees)
+    // Validate challenge exists (entry fee can be 0 for free challenges)
     const challenge = await getChallenge(challengePda.toBase58());
-    if (!challenge || !isEntryFeeValid(challenge.entryFee ?? 0)) {
-      return NextResponse.json({ error: `Challenge entry fee must be at least ◎${MIN_STAKE_SOL} SOL` }, { status: 400 });
+    if (!challenge) {
+      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    }
+    
+    // Validate entry fee is non-negative (allows 0 for free challenges)
+    if (challenge.entryFee < 0) {
+      return NextResponse.json({ error: 'Invalid entry fee' }, { status: 400 });
     }
 
     // Get PDAs

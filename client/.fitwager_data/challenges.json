@@ -1,0 +1,34 @@
+[
+  {
+    "id": "free_7eae6659-8cc9-412f-ab49-1645cda34040",
+    "title": "22",
+    "description": "A steps challenge with a daily goal of 33 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 33,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764941419,
+    "endTime": 1765546219,
+    "status": "active",
+    "createdAt": 1764941419470,
+    "updatedAt": 1764941419470
+  },
+  {
+    "id": "free_02ebc714-9d7e-4f1d-b9b8-584af1d3a6af",
+    "title": "45",
+    "description": "A steps challenge with a daily goal of 14 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 14,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764941461,
+    "endTime": 1765546261,
+    "status": "active",
+    "createdAt": 1764941461916,
+    "updatedAt": 1764941461916
+  }
+]

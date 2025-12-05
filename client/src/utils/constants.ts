@@ -23,6 +23,9 @@ export const RPC_ENDPOINTS = {
   mainnet: "https://api.mainnet-beta.solana.com",
 } as const;
 
+// Supported networks (for wallet switching)
+export const SUPPORTED_NETWORKS = ['devnet', 'testnet', 'mainnet'] as const;
+
 // Current cluster
 export const CLUSTER = (
   typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SOLANA_CLUSTER 
@@ -45,8 +48,8 @@ export function getExplorerUrl(type: "tx" | "address", value: string): string {
 
 // Challenge defaults
 export const DEFAULT_CHALLENGE_DURATION_DAYS = 7;
-// The minimum entry fee (in SOL) enforced across UI / API / on-chain program
-export const MIN_STAKE_SOL = 0.02;
+// The minimum entry fee (in SOL) - set to 0 to allow free challenges
+export const MIN_STAKE_SOL = 0;
 export const MAX_STAKE_SOL = 100;
 
 // Fee constants (in basis points)

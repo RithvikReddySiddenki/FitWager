@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { PublicKey } from "@solana/web3.js";
 import { WalletContextState } from "@solana/wallet-adapter-react";
+import { v4 as uuidv4 } from "uuid";
 import * as anchorClient from "./anchorClient";
 import { lamportsToSol } from "./solana";
 import { shortenPublicKey } from "./pda";
@@ -309,48 +310,31 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
     const { addToast, openTxModal, setLastTxSignature, fetchChallenges } = get();
     set({ txInProgress: true });
 
-    openTxModal({
-      type: "pending",
-      title: "Creating Challenge",
-      message: "Please confirm the transaction in your wallet...",
-    });
-
     try {
       if (!wallet.publicKey) {
         throw new Error("Wallet not connected");
       }
 
-      // Validate wallet has signing capabilities
-      if (!wallet.signTransaction || !wallet.signAllTransactions) {
-        console.error("Wallet signing methods missing:", {
-          hasSignTransaction: !!wallet.signTransaction,
-          hasSignAllTransactions: !!wallet.signAllTransactions,
-        });
-        throw new Error("Wallet adapter not properly initialized - missing signing methods");
-      }
+      // Map challenge type: "time" -> "duration" for API compatibility
+      const challengeTypeMap: Record<string, string> = {
+        "time": "duration",
+        "steps": "steps",
+        "distance": "distance",
+        "calories": "calories",
+      };
+      const apiChallengeType = challengeTypeMap[data.type] || data.type;
 
-      console.log("Starting challenge creation with wallet:", {
-        publicKey: wallet.publicKey.toBase58(),
-        connected: wallet.connected,
-      });
+      let challengeId: string;
+      let signature: string | null = null;
 
-      const result = await anchorClient.createChallenge(wallet, {
-        entryFeeSol: data.stake,
-        durationDays: data.duration,
-        challengeType: data.type,
-        goal: data.goal,
-        isPublic: data.isPublic,
-      });
+      // For free challenges (0 SOL), skip on-chain transaction and just save to database
+      if (data.stake === 0) {
+        console.log("Creating free challenge (0 SOL) - skipping on-chain transaction");
+        
+        // Generate a unique ID for the free challenge
+        challengeId = `free_${uuidv4()}`;
 
-      console.log("Challenge creation succeeded:", {
-        signature: result.signature,
-        challengePda: result.challengePda.toBase58(),
-      });
-
-      setLastTxSignature(result.signature);
-
-      // Save challenge to database so it appears in explore page
-      try {
+        // Save challenge to database directly
         const dbResponse = await fetch("/api/challenges/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -358,59 +342,148 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
             title: data.title,
             description: data.description,
             creator: wallet.publicKey!.toBase58(),
-            challengeType: data.type,
+            challengeType: apiChallengeType,
             goal: data.goal,
-            entryFee: data.stake,
+            entryFee: 0,
             durationDays: data.duration,
             isPublic: data.isPublic,
-            onChainId: result.challengePda.toBase58(),
+            onChainId: challengeId, // Use generated ID for free challenges
           }),
         });
 
         if (!dbResponse.ok) {
-          console.error("Failed to save challenge to database:", dbResponse.statusText);
+          const errorText = await dbResponse.text();
+          console.error('[Store] Failed to save free challenge:', errorText);
+          throw new Error(`Failed to save challenge: ${errorText}`);
         }
-      } catch (dbError) {
-        console.error("Error saving challenge to database:", dbError);
-      }
 
-      set({
-        txModal: {
-          isOpen: true,
-          type: "success",
-          title: "Successfully Created Challenge",
-          message: `Your challenge "${data.title}" has been created successfully. You will be redirected to the challenge page.`,
-          txSignature: result.signature,
-        },
-      });
+        const dbData = await dbResponse.json();
+        console.log('[Store] Free challenge saved successfully:', {
+          id: dbData.challenge?.id,
+          title: dbData.challenge?.title,
+        });
 
-      addToast("✓ Successfully created challenge", "success", 6000, result.signature);
+        addToast("✓ Free challenge created successfully", "success", 5000);
+      } else {
+        // For paid challenges, create on-chain transaction
+        openTxModal({
+          type: "pending",
+          title: "Creating Challenge",
+          message: "Please confirm the transaction in your wallet...",
+        });
 
-      // Auto-close success modal after 3 seconds to allow redirect
-      setTimeout(() => {
-        set((state) => ({ txModal: { ...state.txModal, isOpen: false } }));
-      }, 3000);
+        // Validate wallet has signing capabilities
+        if (!wallet.signTransaction || !wallet.signAllTransactions) {
+          console.error("Wallet signing methods missing:", {
+            hasSignTransaction: !!wallet.signTransaction,
+            hasSignAllTransactions: !!wallet.signAllTransactions,
+          });
+          throw new Error("Wallet adapter not properly initialized - missing signing methods");
+        }
 
-      // Refresh challenges list in background (don't wait for it)
-      fetchChallenges({ filter: "all" }).catch(console.error);
+        console.log("Starting challenge creation with wallet:", {
+          publicKey: wallet.publicKey.toBase58(),
+          connected: wallet.connected,
+          entryFee: data.stake,
+        });
 
-      return { success: true, challengeId: result.challengePda.toBase58() };
-    } catch (error) {
-      const errorMsg = anchorClient.formatAnchorError(error);
-      
-      // Skip showing "not found" errors - they're expected when challenges don't exist
-      if (!errorMsg.includes("not found")) {
+        const result = await anchorClient.createChallenge(wallet, {
+          entryFeeSol: data.stake,
+          durationDays: data.duration,
+          challengeType: data.type,
+          goal: data.goal,
+          isPublic: data.isPublic,
+        });
+
+        console.log("Challenge creation succeeded:", {
+          signature: result.signature,
+          challengePda: result.challengePda.toBase58(),
+        });
+
+        signature = result.signature;
+        challengeId = result.challengePda.toBase58();
+        setLastTxSignature(signature);
+
+        // Save challenge to database so it appears in explore page
+        try {
+          const dbResponse = await fetch("/api/challenges/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: data.title,
+              description: data.description,
+              creator: wallet.publicKey!.toBase58(),
+              challengeType: apiChallengeType,
+              goal: data.goal,
+              entryFee: data.stake,
+              durationDays: data.duration,
+              isPublic: data.isPublic,
+              onChainId: challengeId,
+            }),
+          });
+
+          if (!dbResponse.ok) {
+            console.error("Failed to save challenge to database:", dbResponse.statusText);
+          }
+        } catch (dbError) {
+          console.error("Error saving challenge to database:", dbError);
+        }
+
         set({
           txModal: {
             isOpen: true,
-            type: "error",
-            title: "Transaction Failed",
-            message: errorMsg,
+            type: "success",
+            title: "Successfully Created Challenge",
+            message: `Your challenge "${data.title}" has been created successfully. You will be redirected to the challenge page.`,
+            txSignature: signature,
           },
         });
-        addToast(errorMsg, "error", 3000);
+
+        addToast("✓ Successfully created challenge", "success", 6000, signature);
+
+        // Auto-close success modal after 3 seconds to allow redirect
+        setTimeout(() => {
+          set((state) => ({ txModal: { ...state.txModal, isOpen: false } }));
+        }, 3000);
       }
-      return { success: false, error: errorMsg };
+
+      // Refresh challenges list to show the new challenge immediately
+      // Wait a bit for database to be ready, then fetch
+      setTimeout(() => {
+        Promise.all([
+          fetchChallenges({ filter: "all" }),
+          fetchChallenges({ filter: "active", isPublic: true }),
+        ]).catch((err) => {
+          console.error('[Store] Error refreshing challenges after creation:', err);
+        });
+      }, 500); // Small delay to ensure database write is complete
+
+      return { success: true, challengeId };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      
+      // Only show transaction modal for paid challenges (on-chain errors)
+      if (data.stake > 0) {
+        const formattedError = anchorClient.formatAnchorError(error);
+        
+        // Skip showing "not found" errors - they're expected when challenges don't exist
+        if (!formattedError.includes("not found")) {
+          set({
+            txModal: {
+              isOpen: true,
+              type: "error",
+              title: "Transaction Failed",
+              message: formattedError,
+            },
+          });
+          addToast(formattedError, "error", 3000);
+        }
+        return { success: false, error: formattedError };
+      } else {
+        // For free challenges, just show a simple error toast
+        addToast(`Failed to create challenge: ${errorMsg}`, "error", 5000);
+        return { success: false, error: errorMsg };
+      }
     } finally {
       set({ txInProgress: false });
     }
@@ -638,9 +711,19 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
       const response = await fetch(`/api/challenges/list?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
+        console.log('[Store] Fetched challenges:', {
+          count: data.challenges?.length || 0,
+          total: data.total || 0,
+          options,
+        });
         set({ challenges: data.challenges || [] });
       } else {
-        console.error("Failed to fetch challenges:", response.statusText);
+        const errorText = await response.text();
+        console.error("Failed to fetch challenges:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+        });
         set({ challenges: [] });
       }
     } catch (error) {

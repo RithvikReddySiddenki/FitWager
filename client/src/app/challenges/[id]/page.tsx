@@ -119,9 +119,9 @@ export default function ChallengeDetailPage() {
       addToast("Connect wallet first", "warning");
       return;
     }
-    // Enforce minimum entry fee
-    if ((currentChallenge.entryFee ?? 0) < MIN_STAKE_SOL) {
-      addToast(`Entry fee must be at least ◎${MIN_STAKE_SOL} SOL to join`, "warning");
+    // Validate entry fee is non-negative (allows 0 for free challenges)
+    if ((currentChallenge.entryFee ?? 0) < 0) {
+      addToast(`Invalid entry fee`, "warning");
       return;
     }
     await joinChallenge(wallet, currentChallenge.id);
@@ -208,7 +208,9 @@ export default function ChallengeDetailPage() {
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="stat-card">
             <span className="stat-card-label">Entry Fee</span>
-            <span className="stat-card-value purple">◎{currentChallenge.entryFee}</span>
+            <span className="stat-card-value purple">
+              {currentChallenge.entryFee === 0 ? "Free" : `◎${currentChallenge.entryFee}`}
+            </span>
           </div>
           <div className="stat-card">
             <span className="stat-card-label">Prize Pool</span>
@@ -309,7 +311,7 @@ export default function ChallengeDetailPage() {
                   disabled={txInProgress}
                   className="btn btn-primary btn-block"
                 >
-                  {txInProgress ? "Processing..." : `Join for ◎${currentChallenge.entryFee}`}
+                  {txInProgress ? "Processing..." : (currentChallenge.entryFee === 0 ? "Join Free" : `Join for ◎${currentChallenge.entryFee}`)}
                 </button>
               )}
 

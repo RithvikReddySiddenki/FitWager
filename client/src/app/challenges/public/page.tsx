@@ -207,7 +207,7 @@ export default function PublicChallengesPage() {
                         <span className="text-xl">
                           {challenge.type === "steps" ? "👟" : 
                            challenge.type === "distance" ? "🏃" : 
-                           challenge.type === "time" ? "⏱️" : "🏆"}
+                           challenge.type === "duration" ? "⏱️" : "🏆"}
                         </span>
                       </div>
                       <div>
@@ -232,7 +232,9 @@ export default function PublicChallengesPage() {
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-white/5 rounded-lg p-2 text-center">
                       <p className="text-xs text-gray-500">Entry</p>
-                      <p className="font-semibold text-violet-400">◎{challenge.entryFee}</p>
+                      <p className="font-semibold text-violet-400">
+                        {challenge.entryFee === 0 ? "Free" : `◎${challenge.entryFee}`}
+                      </p>
                     </div>
                     <div className="bg-white/5 rounded-lg p-2 text-center">
                       <p className="text-xs text-gray-500">Pool</p>
@@ -262,7 +264,7 @@ export default function PublicChallengesPage() {
                           Joining...
                         </span>
                       ) : (
-                        `Join for ◎${challenge.entryFee}`
+                        challenge.entryFee === 0 ? "Join Free" : `Join for ◎${challenge.entryFee}`
                       )}
                     </button>
                   )}

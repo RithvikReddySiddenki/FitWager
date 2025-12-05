@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState, useEffect } from "react";
-import { MIN_STAKE_SOL } from "@/utils/constants";
+import { MIN_STAKE_SOL, MAX_STAKE_SOL } from "@/utils/constants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -12,7 +12,7 @@ import ConnectWalletButton from "@/components/ConnectWalletButton";
 const CHALLENGE_TYPES = [
   { value: "steps", label: "Steps", icon: "👟" },
   { value: "distance", label: "Distance", icon: "🏃" },
-  { value: "time", label: "Time", icon: "⏱️" },
+  { value: "duration", label: "Time", icon: "⏱️" },
   { value: "calories", label: "Calories", icon: "🔥" },
 ];
 
@@ -23,6 +23,7 @@ const DURATIONS = [
 ];
 
 const STAKES = [
+  { value: 0, label: "Free" },
   { value: 0.02, label: "◎0.02" },
   { value: 0.1, label: "◎0.1" },
   { value: 0.25, label: "◎0.25" },
@@ -70,25 +71,36 @@ export default function CreateChallengePage() {
       return;
     }
 
-    // Validate minimum stake
-    if (stake < MIN_STAKE_SOL) {
-      addToast(`Entry fee must be at least ◎${MIN_STAKE_SOL} SOL`, "warning");
+    // Validate stake (allows 0 for free challenges, but must be non-negative)
+    if (stake < 0 || stake > MAX_STAKE_SOL) {
+      addToast(`Entry fee must be between 0 and ${MAX_STAKE_SOL} SOL`, "warning");
       return;
     }
 
-    const result = await createChallenge(wallet, {
-      title: title.trim(),
-      description: `A ${type} challenge with a daily goal of ${goal} ${getGoalUnit().split('/')[0]}.`,
-      type,
-      goal: Number(goal),
-      stake,
-      duration,
-      isPublic,
-    });
+    try {
+      const result = await createChallenge(wallet, {
+        title: title.trim(),
+        description: `A ${type} challenge with a daily goal of ${goal} ${getGoalUnit().split('/')[0]}.`,
+        type,
+        goal: Number(goal),
+        stake,
+        duration,
+        isPublic,
+      });
 
-    if (result.success && result.challengeId) {
-      // Redirect immediately to the new challenge page
-      router.push(`/challenges/${result.challengeId}`);
+      if (result.success && result.challengeId) {
+        console.log('[Create Page] Challenge created, redirecting to:', result.challengeId);
+        // Small delay to ensure database is updated before redirect
+        setTimeout(() => {
+          router.push(`/challenges/${result.challengeId}`);
+        }, 300);
+      } else {
+        console.error('[Create Page] Challenge creation failed:', result.error);
+        addToast(result.error || "Failed to create challenge", "error");
+      }
+    } catch (error) {
+      console.error('[Create Page] Error creating challenge:', error);
+      addToast(error instanceof Error ? error.message : "Failed to create challenge", "error");
     }
   }
 
@@ -207,9 +219,9 @@ export default function CreateChallengePage() {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Entry Fee (SOL)
-              <div className="text-xs text-gray-500 mt-1">Minimum: ◎{MIN_STAKE_SOL} SOL</div>
+              <div className="text-xs text-gray-500 mt-1">Free challenges allowed (0 SOL)</div>
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {STAKES.map((s) => (
                 <button
                   key={s.value}
@@ -221,7 +233,9 @@ export default function CreateChallengePage() {
                       : "bg-white/5 border-2 border-transparent"
                   }`}
                 >
-                  <span className="font-semibold text-emerald-400">{s.label}</span>
+                  <span className={`font-semibold ${s.value === 0 ? "text-cyan-400" : "text-emerald-400"}`}>
+                    {s.label}
+                  </span>
                 </button>
               ))}
             </div>
@@ -251,8 +265,10 @@ export default function CreateChallengePage() {
           {/* Summary */}
           <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30">
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">You will stake</span>
-              <span className="text-xl font-bold text-emerald-400">◎{stake} SOL</span>
+              <span className="text-gray-400">Entry Fee</span>
+              <span className="text-xl font-bold text-emerald-400">
+                {stake === 0 ? "Free" : `◎${stake} SOL`}
+              </span>
             </div>
           </div>
 
