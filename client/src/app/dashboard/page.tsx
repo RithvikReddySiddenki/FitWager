@@ -2,18 +2,25 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useFitWagerStore } from "@/utils/store";
 import ConnectWalletButton from "@/components/ConnectWalletButton";
+import { GoogleFitConnect } from "@/components/GoogleFitConnect";
 import { shortenPublicKey } from "@/utils/pda";
 
 export default function Dashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { publicKey, connected } = useWallet();
   const { 
     userStats, 
     fetchUserStats, 
     clearUserData,
     addToast,
+    googleFitStatus,
+    fitnessData,
+    fetchFitnessData,
   } = useFitWagerStore();
   
   const [mounted, setMounted] = useState(false);
@@ -26,6 +33,32 @@ export default function Dashboard() {
     isMounted.current = true;
     return () => { isMounted.current = false; };
   }, []);
+
+  // Handle OAuth callback params
+  useEffect(() => {
+    if (!mounted) return;
+    
+    const googleConnected = searchParams.get('google_connected');
+    const error = searchParams.get('error');
+    
+    if (googleConnected === 'true') {
+      addToast("Google Fit connected successfully!", "success");
+      // Clean URL
+      router.replace('/dashboard', { scroll: false });
+    }
+    
+    if (error) {
+      const errorMessages: Record<string, string> = {
+        google_auth_denied: "Google authentication was cancelled",
+        missing_code: "Authentication failed - missing code",
+        auth_expired: "Authentication session expired - please try again",
+        invalid_state: "Invalid authentication state - please try again",
+        google_auth_failed: "Google authentication failed - please try again",
+      };
+      addToast(errorMessages[error] || "Authentication error", "error");
+      router.replace('/dashboard', { scroll: false });
+    }
+  }, [mounted, searchParams, addToast, router]);
 
   useEffect(() => {
     const currentWallet = publicKey?.toBase58() || null;
@@ -43,7 +76,10 @@ export default function Dashboard() {
     const loadData = async () => {
       setLoading(true);
       try {
-        await fetchUserStats(currentWallet);
+        await Promise.all([
+          fetchUserStats(currentWallet),
+          fetchFitnessData(currentWallet),
+        ]);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
@@ -52,7 +88,7 @@ export default function Dashboard() {
     };
 
     loadData();
-  }, [publicKey, fetchUserStats, clearUserData]);
+  }, [publicKey, fetchUserStats, fetchFitnessData, clearUserData]);
 
   if (!mounted) return null;
 
@@ -90,6 +126,9 @@ export default function Dashboard() {
         {loading ? (
           <div className="space-y-4">
             {/* Skeleton loading */}
+            <div className="mobile-card">
+              <div className="skeleton h-16 w-full" />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               {[1,2,3,4].map(i => (
                 <div key={i} className="stat-card">
@@ -101,6 +140,11 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {/* Google Fit Connection */}
+            <div className="mb-6">
+              <GoogleFitConnect />
+            </div>
+
             {/* Stats Grid */}
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="stat-card">
@@ -122,6 +166,51 @@ export default function Dashboard() {
                 <span className="stat-card-value yellow">◎{(userStats?.totalEarned || 0).toFixed(2)}</span>
               </div>
             </div>
+
+            {/* Today's Fitness Stats */}
+            {googleFitStatus.isConnected && fitnessData && (
+              <div className="mobile-card mb-6">
+                <h2 className="text-sm font-semibold text-gray-400 mb-4">TODAY'S PROGRESS</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">👟</span>
+                      <span className="text-xs text-gray-500">Steps</span>
+                    </div>
+                    <p className="text-2xl font-bold text-violet-400">
+                      {(fitnessData.steps || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🏃</span>
+                      <span className="text-xs text-gray-500">Distance</span>
+                    </div>
+                    <p className="text-2xl font-bold text-cyan-400">
+                      {((fitnessData.distance || 0) / 1000).toFixed(1)} km
+                    </p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">⏱️</span>
+                      <span className="text-xs text-gray-500">Active</span>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-400">
+                      {fitnessData.activeMinutes || 0} min
+                    </p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">🔥</span>
+                      <span className="text-xs text-gray-500">Calories</span>
+                    </div>
+                    <p className="text-2xl font-bold text-red-400">
+                      {(fitnessData.calories || 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="space-y-3 mb-6">

@@ -55,6 +55,28 @@ export interface UserStats {
   }>;
 }
 
+export interface GoogleFitStatus {
+  isConnected: boolean;
+  email?: string;
+  lastSync?: number;
+}
+
+export interface FitnessData {
+  steps: number;
+  distance: number;
+  calories: number;
+  activeMinutes: number;
+  lastUpdated: number;
+}
+
+export interface VerificationResult {
+  score: number;
+  meetsGoal: boolean;
+  completionPercentage: number;
+  verificationHash: string;
+  verifiedAt: number;
+}
+
 export interface Toast {
   id: string;
   message: string;
@@ -181,6 +203,24 @@ interface FitWagerStore {
 
   // Refresh current data
   refreshCurrentChallenge: (wallet?: string) => Promise<void>;
+
+  // Google Fit integration
+  googleFitStatus: GoogleFitStatus;
+  setGoogleFitStatus: (status: GoogleFitStatus) => void;
+  fitnessData: FitnessData | null;
+  setFitnessData: (data: FitnessData | null) => void;
+  verificationResult: VerificationResult | null;
+  setVerificationResult: (result: VerificationResult | null) => void;
+
+  // Google Fit actions
+  connectGoogleFit: (wallet: string) => Promise<string | null>;
+  fetchFitnessData: (wallet: string, startTime?: number, endTime?: number) => Promise<FitnessData | null>;
+  verifyChallenge: (wallet: string, challengeId: string) => Promise<VerificationResult | null>;
+  submitVerifiedScore: (
+    wallet: WalletContextState,
+    challengeId: string,
+    verificationResult: VerificationResult
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 // ============================================================
@@ -646,6 +686,164 @@ export const useFitWagerStore = create<FitWagerStore>((set, get) => ({
       ]);
     } finally {
       set({ isRefreshing: false });
+    }
+  },
+
+  // ============================================================
+  // Google Fit Integration
+  // ============================================================
+
+  googleFitStatus: { isConnected: false },
+  setGoogleFitStatus: (status) => set({ googleFitStatus: status }),
+  
+  fitnessData: null,
+  setFitnessData: (data) => set({ fitnessData: data }),
+  
+  verificationResult: null,
+  setVerificationResult: (result) => set({ verificationResult: result }),
+
+  connectGoogleFit: async (wallet) => {
+    try {
+      const response = await fetch(`/api/google/auth?wallet=${wallet}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.authUrl;
+      }
+      get().addToast("Failed to start Google authentication", "error");
+      return null;
+    } catch (error) {
+      console.error("Google auth error:", error);
+      get().addToast("Failed to connect to Google", "error");
+      return null;
+    }
+  },
+
+  fetchFitnessData: async (wallet, startTime, endTime) => {
+    try {
+      const params = new URLSearchParams({ wallet });
+      if (startTime) params.set("startTime", startTime.toString());
+      if (endTime) params.set("endTime", endTime.toString());
+      
+      const response = await fetch(`/api/google/fitnessData?${params.toString()}`);
+      
+      if (response.ok) {
+        const result = await response.json();
+        const fitnessData: FitnessData = {
+          steps: result.data.steps || 0,
+          distance: result.data.distance || 0,
+          calories: result.data.calories || 0,
+          activeMinutes: result.data.activeMinutes || 0,
+          lastUpdated: result.lastSynced,
+        };
+        set({ fitnessData });
+        return fitnessData;
+      } else {
+        const errorData = await response.json();
+        if (errorData.needsAuth) {
+          set({ googleFitStatus: { isConnected: false } });
+          get().addToast("Please connect Google Fit to continue", "warning");
+        }
+        return null;
+      }
+    } catch (error) {
+      console.error("Fitness data error:", error);
+      return null;
+    }
+  },
+
+  verifyChallenge: async (wallet, challengeId) => {
+    const { addToast } = get();
+    
+    try {
+      const response = await fetch("/api/google/verifyChallenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet, challengeId }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const result: VerificationResult = {
+          score: data.verification.calculatedScore,
+          meetsGoal: data.verification.meetsGoal,
+          completionPercentage: Math.min(100, (data.verification.calculatedScore / (data.verification.goal || 1)) * 100),
+          verificationHash: data.verification.verificationHash,
+          verifiedAt: data.verification.verifiedAt,
+        };
+        set({ verificationResult: result });
+        addToast("Fitness data verified successfully!", "success");
+        return result;
+      } else {
+        const errorData = await response.json();
+        addToast(errorData.error || "Verification failed", "error");
+        return null;
+      }
+    } catch (error) {
+      console.error("Verification error:", error);
+      addToast("Failed to verify fitness data", "error");
+      return null;
+    }
+  },
+
+  submitVerifiedScore: async (wallet, challengeId, verificationResult) => {
+    const { addToast, openTxModal, setLastTxSignature, refreshCurrentChallenge } = get();
+    set({ txInProgress: true });
+
+    openTxModal({
+      type: "pending",
+      title: "Submitting Verified Score",
+      message: "Please confirm the transaction in your wallet...",
+    });
+
+    try {
+      if (!wallet.publicKey) {
+        throw new Error("Wallet not connected");
+      }
+
+      // Convert verification hash to bytes
+      const hashBytes: number[] = [];
+      for (let i = 0; i < verificationResult.verificationHash.length; i += 2) {
+        hashBytes.push(parseInt(verificationResult.verificationHash.slice(i, i + 2), 16));
+      }
+
+      const result = await anchorClient.submitScore(
+        wallet,
+        new PublicKey(challengeId),
+        verificationResult.score
+      );
+
+      setLastTxSignature(result.signature);
+
+      set({
+        txModal: {
+          isOpen: true,
+          type: "success",
+          title: "Score Submitted!",
+          message: `Your verified score of ${verificationResult.score.toLocaleString()} has been recorded on-chain.`,
+          txSignature: result.signature,
+        },
+      });
+
+      addToast("Verified score submitted!", "success", 5000, result.signature);
+      await refreshCurrentChallenge(wallet.publicKey.toBase58());
+
+      return { success: true };
+    } catch (error) {
+      const errorMsg = anchorClient.formatAnchorError(error);
+      
+      set({
+        txModal: {
+          isOpen: true,
+          type: "error",
+          title: "Transaction Failed",
+          message: errorMsg,
+        },
+      });
+
+      addToast(errorMsg, "error");
+      return { success: false, error: errorMsg };
+    } finally {
+      set({ txInProgress: false });
     }
   },
 }));
