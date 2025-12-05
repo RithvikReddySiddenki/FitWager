@@ -159,9 +159,21 @@ export function getProgram(provider: AnchorProvider): Program<any> {
     
     return new Program(modifiedIDL as any, provider);
   } catch (error) {
-    console.error('[Anchor] Invalid program ID:', error);
+    console.error('[Anchor] Error creating Program:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid program ID: ${errorMessage}. Check NEXT_PUBLIC_PROGRAM_ID in .env.local`);
+    
+    // Check if it's an IDL error (missing type definition)
+    if (errorMessage.includes('Type not found') || errorMessage.includes('challengeType')) {
+      throw new Error(`IDL Error: ${errorMessage}. The IDL is missing type definitions. Run 'anchor build' and update client/src/utils/idl.ts with the generated IDL.`);
+    }
+    
+    // Check if it's a program ID error
+    if (errorMessage.includes('Invalid program ID') || errorMessage.includes('Non-base58')) {
+      throw new Error(`Invalid program ID: ${errorMessage}. Check NEXT_PUBLIC_PROGRAM_ID in .env.local`);
+    }
+    
+    // Generic error
+    throw new Error(`Failed to create Program: ${errorMessage}`);
   }
 }
 

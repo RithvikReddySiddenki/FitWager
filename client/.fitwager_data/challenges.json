@@ -78,5 +78,21 @@
     "status": "active",
     "createdAt": 1764949027168,
     "updatedAt": 1764949027168
+  },
+  {
+    "id": "free_835a2bd5-7388-4bb7-9af1-b3468de9448f",
+    "title": "11",
+    "description": "A steps challenge with a daily goal of 1 steps.",
+    "creator": "8reBsa5u5FC13S46GWNLNVb2NLa4Snu2xmykE29y8NKi",
+    "challengeType": "steps",
+    "goal": 1,
+    "entryFee": 0,
+    "isUsdc": false,
+    "isPublic": true,
+    "startTime": 1764961868,
+    "endTime": 1765566668,
+    "status": "active",
+    "createdAt": 1764961868435,
+    "updatedAt": 1764961868435
   }
 ]

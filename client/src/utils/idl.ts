@@ -102,10 +102,14 @@ export const IDL: FitWager = {
     {
       name: "submitScore",
       accounts: [
+        { name: "submitter", isMut: false, isSigner: true },
         { name: "challenge", isMut: false, isSigner: false },
         { name: "participant", isMut: true, isSigner: false },
       ],
-      args: [{ name: "score", type: "u64" }],
+      args: [
+        { name: "score", type: "u64" },
+        { name: "verificationHash", type: { array: ["u8", 32] } },
+      ],
     },
     {
       name: "endChallengeSol",
@@ -154,7 +158,14 @@ export const IDL: FitWager = {
           { name: "totalPool", type: "u64" },
           { name: "startTime", type: "i64" },
           { name: "endTime", type: "i64" },
+          { name: "participantCount", type: "u32" },
           { name: "status", type: { defined: "ChallengeStatus" } },
+          { name: "challengeType", type: { defined: "ChallengeType" } },
+          { name: "goal", type: "u64" },
+          { name: "isUsdc", type: "bool" },
+          { name: "isPublic", type: "bool" },
+          { name: "winner", type: "publicKey" },
+          { name: "bump", type: "u8" },
         ],
       },
     },
@@ -164,8 +175,14 @@ export const IDL: FitWager = {
         kind: "struct",
         fields: [
           { name: "player", type: "publicKey" },
+          { name: "challenge", type: "publicKey" },
           { name: "score", type: "u64" },
           { name: "hasJoined", type: "bool" },
+          { name: "hasSubmitted", type: "bool" },
+          { name: "joinedAt", type: "i64" },
+          { name: "lastSubmission", type: "i64" },
+          { name: "verificationHash", type: { array: ["u8", 32] } },
+          { name: "bump", type: "u8" },
         ],
       },
     },
@@ -175,7 +192,11 @@ export const IDL: FitWager = {
       name: "ChallengeStatus",
       type: {
         kind: "enum",
-        variants: [{ name: "Active" }, { name: "Ended" }],
+        variants: [
+          { name: "Active" },
+          { name: "Ended" },
+          { name: "Cancelled" },
+        ],
       },
     },
     {
